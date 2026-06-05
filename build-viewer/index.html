@@ -230,6 +230,7 @@
       <div class="ctrl-row">
         <button class="ctrl-btn" id="btn-wireframe">[ ] Wire</button>
         <button class="ctrl-btn" id="btn-reset">↺ Reset</button>
+        <button class="ctrl-btn" id="btn-reload">⟳ Reload</button>
       </div>
       <div class="ctrl-row">
         <button class="ctrl-btn" id="btn-top">▲ Top</button>
@@ -270,6 +271,7 @@
         Drop STL here<br>or click to browse
       </div>
       <input type="file" id="file-input" accept=".stl">
+      <div id="auto-load-note" style="display:none;margin-top:8px;font-size:10px;color:#444;letter-spacing:1px;text-align:center;">Start server.py for auto-load</div>
     </div>
 
   </div>
@@ -615,6 +617,7 @@ document.getElementById('btn-wireframe').addEventListener('click', function() {
 });
 
 document.getElementById('btn-reset').addEventListener('click', resetCamera);
+document.getElementById('btn-reload').addEventListener('click', autoLoadSTL);
 document.getElementById('btn-top').addEventListener('click', () => {
   sph.phi = 0.01; sph.theta = 0; updateCamera();
 });
@@ -868,8 +871,19 @@ dz.addEventListener('drop', e => {
 // ─── RENDER LOOP ─────────────────────────────────────────────────────────────
 (function animate() { requestAnimationFrame(animate); renderer.render(scene, camera); })();
 
+// ─── AUTO-LOAD ───────────────────────────────────────────────────────────────
+function autoLoadSTL() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const filename = formatBuildDate(getUnpackDate(today)) + '.stl';
+  fetch('http://localhost:8000/' + filename)
+    .then(r => { if (!r.ok) throw new Error(); return r.arrayBuffer(); })
+    .then(buf => loadArrayBuffer(buf, filename))
+    .catch(() => { document.getElementById('auto-load-note').style.display = 'block'; });
+}
+
 // ─── INIT ────────────────────────────────────────────────────────────────────
 updateBuildInfo();
+autoLoadSTL();
 
 </script>
 
