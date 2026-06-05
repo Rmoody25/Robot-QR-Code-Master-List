@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SCP Build Viewer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0d0d0f;
+    color: #e8e4dc;
+    font-family: 'Courier New', monospace;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 28px;
+    border-bottom: 1px solid #2a2a2e;
+    background: #111114;
+    flex-shrink: 0;
+  }
+  .logo { font-size: 13px; font-weight: bold; letter-spacing: 4px; color: #c8a96e; text-transform: uppercase; }
+  .header-right { display: flex; align-items: center; gap: 24px; }
+  .clock { font-size: 12px; color: #666; letter-spacing: 2px; }
+  .refresh-badge { font-size: 11px; color: #444; letter-spacing: 1px; }
+  .main { display: flex; flex: 1; overflow: hidden; }
+
+  .sidebar {
+    width: 280px;
+    flex-shrink: 0;
+    background: #111114;
+    border-right: 1px solid #2a2a2e;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .build-panel { padding: 16px 20px; border-bottom: 1px solid #1e1e22; }
+  .panel-label { font-size: 10px; letter-spacing: 3px; color: #555; text-transform: uppercase; margin-bottom: 8px; }
+  .build-date-display { font-size: 22px; font-weight: bold; letter-spacing: 2px; color: #c8a96e; margin-bottom: 2px; }
+  .build-date-display.next { color: #7ab8c8; font-size: 17px; }
+  .build-status { font-size: 11px; color: #555; letter-spacing: 1px; }
+  .build-status.ok { color: #5a9e6f; }
+  .build-status.warn { color: #c8a96e; }
+  .build-status.missing { color: #8a4a4a; }
+  .file-info { margin-top: 6px; font-size: 11px; color: #444; word-break: break-all; }
+
+  .controls-panel { padding: 16px 20px; border-bottom: 1px solid #1e1e22; }
+  .ctrl-row { display: flex; gap: 6px; margin-bottom: 6px; }
+  .ctrl-btn {
+    flex: 1;
+    padding: 8px 10px;
+    background: #1a1a1e;
+    border: 1px solid #2e2e34;
+    color: #aaa;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .ctrl-btn:hover { background: #222228; color: #e8e4dc; border-color: #3e3e46; }
+  .ctrl-btn.active { background: #1e2830; color: #7ab8c8; border-color: #3a5a6a; }
+  .ctrl-btn:disabled { opacity: 0.3; cursor: default; }
+
+  .action-btn {
+    display: block;
+    width: 100%;
+    padding: 9px 14px;
+    margin-bottom: 6px;
+    background: #1a1a1e;
+    border: 1px solid #2e2e34;
+    color: #aaa;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.15s;
+  }
+  .action-btn:hover { background: #222228; color: #e8e4dc; border-color: #3e3e46; }
+  .action-btn.danger { color: #c87a7a; border-color: #3a2020; }
+  .action-btn.danger:hover { background: #1e1414; border-color: #5a3030; }
+  .action-btn.safe { color: #7aaa8a; border-color: #203a26; }
+  .action-btn.safe:hover { background: #141e16; border-color: #3a6a46; }
+  .action-btn:disabled { opacity: 0.3; cursor: default; }
+
+  .parts-panel { padding: 16px 20px; border-bottom: 1px solid #1e1e22; flex: 1; }
+  .parts-list { margin-top: 8px; max-height: 180px; overflow-y: auto; }
+  .part-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    margin-bottom: 3px;
+    border: 1px solid #1e1e22;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.1s;
+    letter-spacing: 1px;
+  }
+  .part-item:hover { background: #1a1a1e; border-color: #2e2e34; }
+  .part-item.selected { background: #1e2830; border-color: #3a5a6a; color: #7ab8c8; }
+  .part-item.removed { opacity: 0.3; text-decoration: line-through; pointer-events: none; }
+  .part-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .part-name { flex: 1; }
+  .part-tris { color: #444; font-size: 10px; }
+
+  .stats-row { display: flex; gap: 8px; margin-top: 8px; }
+  .stat-box { flex: 1; background: #161618; border: 1px solid #1e1e22; padding: 8px; text-align: center; }
+  .stat-val { font-size: 16px; font-weight: bold; color: #c8a96e; }
+  .stat-lbl { font-size: 9px; color: #444; letter-spacing: 2px; margin-top: 2px; }
+
+  .load-panel { padding: 16px 20px; }
+  .drop-zone {
+    border: 1px dashed #2e2e34;
+    padding: 16px;
+    text-align: center;
+    font-size: 11px;
+    color: #444;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .drop-zone:hover { border-color: #555; color: #666; }
+  .drop-zone.drag-over { border-color: #c8a96e; color: #c8a96e; }
+  #file-input { display: none; }
+
+  .canvas-area { flex: 1; position: relative; background: #0d0d0f; }
+  #viewer-canvas { width: 100%; height: 100%; display: block; }
+
+  .canvas-overlay {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+  }
+  .empty-state { text-align: center; color: #333; }
+  .empty-state .big { font-size: 48px; margin-bottom: 16px; }
+  .empty-state p { font-size: 12px; letter-spacing: 2px; }
+
+  .selection-hud {
+    position: absolute;
+    top: 16px; left: 50%;
+    transform: translateX(-50%);
+    background: #111114;
+    border: 1px solid #3a5a6a;
+    color: #7ab8c8;
+    font-size: 11px;
+    letter-spacing: 2px;
+    padding: 8px 20px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    white-space: nowrap;
+  }
+  .selection-hud.show { opacity: 1; }
+
+  .corner-info {
+    position: absolute; bottom: 16px; right: 16px;
+    font-size: 10px; color: #2a2a2e; letter-spacing: 1px;
+    text-align: right; pointer-events: none; line-height: 1.8;
+  }
+
+  .loading-overlay {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(13,13,15,0.9);
+    display: none; align-items: center; justify-content: center;
+    flex-direction: column; gap: 12px;
+    color: #c8a96e; font-size: 11px; letter-spacing: 3px;
+  }
+  .spinner {
+    width: 28px; height: 28px;
+    border: 2px solid #2a2a2e; border-top-color: #c8a96e;
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+  }
+  .loading-sub { font-size: 10px; color: #555; letter-spacing: 2px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .error-toast {
+    position: absolute; bottom: 16px; left: 50%;
+    transform: translateX(-50%);
+    background: #2a1414; border: 1px solid #5a2a2a;
+    color: #c87a7a; font-size: 11px; letter-spacing: 1px;
+    padding: 8px 18px; pointer-events: none;
+    opacity: 0; transition: opacity 0.3s; white-space: nowrap;
+  }
+  .error-toast.show { opacity: 1; }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: #111114; }
+  ::-webkit-scrollbar-thumb { background: #2a2a2e; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">SCP // Build Viewer</div>
+  <div class="header-right">
+    <div class="clock" id="clock">--:-- --</div>
+    <div class="refresh-badge" id="refresh-badge">NEXT REFRESH: --</div>
+  </div>
+</header>
+
+<div class="main">
+  <div class="sidebar">
+
+    <div class="build-panel">
+      <div class="panel-label">Current Unpack</div>
+      <div class="build-date-display" id="current-date-display">--/--/--</div>
+      <div class="build-status" id="current-status">Calculating...</div>
+      <div class="file-info" id="current-file-info"></div>
+    </div>
+
+    <div class="build-panel">
+      <div class="panel-label">Today's Build</div>
+      <div class="build-date-display next" id="next-date-display">--/--/--</div>
+      <div class="build-status" id="next-status">Calculating...</div>
+      <div class="file-info" id="next-file-info"></div>
+    </div>
+
+    <div class="controls-panel">
+      <div class="panel-label">View</div>
+      <div class="ctrl-row">
+        <button class="ctrl-btn" id="btn-wireframe">[ ] Wire</button>
+        <button class="ctrl-btn" id="btn-reset">↺ Reset</button>
+      </div>
+      <div class="ctrl-row">
+        <button class="ctrl-btn" id="btn-top">▲ Top</button>
+        <button class="ctrl-btn" id="btn-front">■ Front</button>
+        <button class="ctrl-btn" id="btn-side">◀ Side</button>
+      </div>
+    </div>
+
+    <div class="controls-panel">
+      <div class="panel-label">Parts</div>
+      <button class="action-btn danger" id="btn-remove" disabled>✕ Remove Selected</button>
+      <button class="action-btn safe" id="btn-undo" disabled>↩ Undo Remove</button>
+      <button class="action-btn" id="btn-restore-all" disabled>⟳ Restore All</button>
+    </div>
+
+    <div class="parts-panel">
+      <div class="panel-label">Detected Parts <span id="part-count" style="color:#444"></span></div>
+      <div class="stats-row">
+        <div class="stat-box">
+          <div class="stat-val" id="stat-total">0</div>
+          <div class="stat-lbl">TOTAL</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-val" id="stat-remaining" style="color:#5a9e6f">0</div>
+          <div class="stat-lbl">REMAINING</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-val" id="stat-removed" style="color:#c87a7a">0</div>
+          <div class="stat-lbl">REMOVED</div>
+        </div>
+      </div>
+      <div class="parts-list" id="parts-list"></div>
+    </div>
+
+    <div class="load-panel">
+      <div class="panel-label">Load STL</div>
+      <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+        Drop STL here<br>or click to browse
+      </div>
+      <input type="file" id="file-input" accept=".stl">
+    </div>
+
+  </div>
+
+  <div class="canvas-area">
+    <canvas id="viewer-canvas"></canvas>
+
+    <div class="canvas-overlay" id="empty-overlay">
+      <div class="empty-state">
+        <div class="big">◈</div>
+        <p>No STL loaded</p>
+        <p style="margin-top:8px;font-size:10px;color:#222;">Load an STL to begin</p>
+      </div>
+    </div>
+
+    <div class="selection-hud" id="selection-hud"></div>
+    <div class="loading-overlay" id="loading-overlay">
+      <div class="spinner"></div>
+      <span id="loading-msg">LOADING STL</span>
+      <span class="loading-sub" id="loading-sub"></span>
+    </div>
+    <div class="error-toast" id="error-toast"></div>
+
+    <div class="corner-info">
+      Left drag: rotate &nbsp;|&nbsp; Scroll: zoom &nbsp;|&nbsp; Middle drag: pan<br>
+      Click part to select &nbsp;|&nbsp; Click again to deselect
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+
+// ─── CONFIG ──────────────────────────────────────────────────────────────────
+const REFRESH_INTERVAL_MS = 60 * 60 * 1000;
+
+const PART_COLORS = [
+  0xc8a96e, 0x7ab8c8, 0x8ec87a, 0xc87a8e,
+  0xa07ac8, 0xc8b07a, 0x7ac8b8, 0xc89a7a,
+  0x7a8ec8, 0xb8c87a, 0xc87aa0, 0x7ac888
+];
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+let meshes = [];          // { mesh, color, name, triCount, removed }
+let selectedIndex = -1;
+let undoStack = [];       // stack of removed indices for undo
+
+// ─── DATE LOGIC ──────────────────────────────────────────────────────────────
+function formatBuildDate(d) {
+  return `${d.getMonth()+1}-${d.getDate()}-${String(d.getFullYear()).slice(-2)}`;
+}
+function formatDisplay(d) {
+  return `${d.getMonth()+1}/${d.getDate()}/${String(d.getFullYear()).slice(-2)}`;
+}
+function getUnpackDate(today) {
+  const dow = today.getDay();
+  if (dow === 1) { const f = new Date(today); f.setDate(today.getDate()-3); return f; }
+  if (dow === 0) { const f = new Date(today); f.setDate(today.getDate()-2); return f; }
+  const p = new Date(today); p.setDate(today.getDate()-1); return p;
+}
+function getTodayBuildDate(today) {
+  const dow = today.getDay();
+  return (dow === 0 || dow === 6) ? null : today;
+}
+function updateBuildInfo() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const unpackDate = getUnpackDate(today);
+  const todayBuild = getTodayBuildDate(today);
+  document.getElementById('current-date-display').textContent = formatDisplay(unpackDate);
+  document.getElementById('next-date-display').textContent = todayBuild ? formatDisplay(todayBuild) : 'No build today';
+  document.getElementById('current-file-info').textContent = formatBuildDate(unpackDate) + '.stl';
+  document.getElementById('next-file-info').textContent = todayBuild ? formatBuildDate(todayBuild) + '.stl' : '—';
+  document.getElementById('current-status').textContent = 'Ready to unpack';
+  document.getElementById('current-status').className = 'build-status ok';
+  document.getElementById('next-status').textContent = todayBuild ? 'Printing today — unpack tomorrow' : 'Weekend — no print';
+  document.getElementById('next-status').className = todayBuild ? 'build-status warn' : 'build-status missing';
+}
+
+// ─── CLOCK ───────────────────────────────────────────────────────────────────
+let nextRefreshAt = Date.now() + REFRESH_INTERVAL_MS;
+function updateClock() {
+  const now = new Date();
+  const h = now.getHours(), m = now.getMinutes();
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  document.getElementById('clock').textContent =
+    `${((h%12)||12).toString().padStart(2,'0')}:${m.toString().padStart(2,'0')} ${ampm}`;
+  const msLeft = nextRefreshAt - Date.now();
+  const mLeft = Math.floor(msLeft/60000), sLeft = Math.floor((msLeft%60000)/1000);
+  document.getElementById('refresh-badge').textContent =
+    `NEXT REFRESH: ${mLeft}:${sLeft.toString().padStart(2,'0')}`;
+}
+setInterval(updateClock, 1000);
+updateClock();
+setInterval(() => { nextRefreshAt = Date.now() + REFRESH_INTERVAL_MS; updateBuildInfo(); }, REFRESH_INTERVAL_MS);
+
+// ─── THREE.JS SETUP ──────────────────────────────────────────────────────────
+const canvas = document.getElementById('viewer-canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setClearColor(0x0d0d0f);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 100000);
+camera.position.set(0, 0, 200);
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.45));
+const dl1 = new THREE.DirectionalLight(0xfff5e0, 1.0);
+dl1.position.set(5, 10, 7); scene.add(dl1);
+const dl2 = new THREE.DirectionalLight(0xc8e0ff, 0.35);
+dl2.position.set(-5, -4, -6); scene.add(dl2);
+
+function resizeRenderer() {
+  const w = canvas.parentElement.clientWidth, h = canvas.parentElement.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resizeRenderer);
+resizeRenderer();
+
+// ─── ORBIT CONTROLS ──────────────────────────────────────────────────────────
+let isDragging = false, isRightDrag = false, isMidDrag = false;
+let prevMouse = {x:0,y:0};
+let sph = {theta:0.5, phi:1.0, radius:200};
+let panOffset = new THREE.Vector3();
+let mouseMovedSinceDown = false;
+
+function updateCamera() {
+  const x = sph.radius * Math.sin(sph.phi) * Math.sin(sph.theta);
+  const y = sph.radius * Math.cos(sph.phi);
+  const z = sph.radius * Math.sin(sph.phi) * Math.cos(sph.theta);
+  camera.position.set(x + panOffset.x, y + panOffset.y, z + panOffset.z);
+  camera.lookAt(panOffset);
+}
+
+canvas.addEventListener('mousedown', e => {
+  if (e.button === 0) isDragging = true;
+  if (e.button === 2) isRightDrag = true;
+  if (e.button === 1) { isMidDrag = true; e.preventDefault(); }
+  prevMouse = {x: e.clientX, y: e.clientY};
+  mouseMovedSinceDown = false;
+});
+
+window.addEventListener('mouseup', e => {
+  if (e.button === 0) {
+    if (!mouseMovedSinceDown) handleClick(e);
+    isDragging = false;
+  }
+  isRightDrag = false; isMidDrag = false;
+});
+
+window.addEventListener('mousemove', e => {
+  const dx = e.clientX - prevMouse.x, dy = e.clientY - prevMouse.y;
+  if (Math.abs(dx) > 2 || Math.abs(dy) > 2) mouseMovedSinceDown = true;
+  prevMouse = {x: e.clientX, y: e.clientY};
+  if (isDragging) {
+    sph.theta -= dx * 0.005;
+    sph.phi = Math.max(0.05, Math.min(Math.PI - 0.05, sph.phi - dy * 0.005));
+    updateCamera();
+  }
+  if (isRightDrag) {
+    sph.radius = Math.max(1, sph.radius + dy * 0.4);
+    updateCamera();
+  }
+  if (isMidDrag) {
+    const right = new THREE.Vector3();
+    const upV = new THREE.Vector3();
+    const dir = camera.position.clone().sub(panOffset).normalize();
+    right.crossVectors(dir, new THREE.Vector3(0,1,0)).normalize();
+    upV.crossVectors(right, dir).normalize();
+    panOffset.addScaledVector(right, -dx * sph.radius * 0.001);
+    panOffset.addScaledVector(upV, dy * sph.radius * 0.001);
+    updateCamera();
+  }
+});
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  sph.radius = Math.max(0.1, sph.radius + e.deltaY * 0.15);
+  updateCamera();
+}, {passive: false});
+
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+updateCamera();
+
+// ─── RAYCASTING / CLICK ──────────────────────────────────────────────────────
+const raycaster = new THREE.Raycaster();
+const mouse2d = new THREE.Vector2();
+
+function handleClick(e) {
+  if (meshes.length === 0) return;
+  const rect = canvas.getBoundingClientRect();
+  mouse2d.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse2d.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse2d, camera);
+
+  const activeMeshes = meshes.filter(p => !p.removed).map(p => p.mesh);
+  const hits = raycaster.intersectObjects(activeMeshes);
+
+  if (hits.length > 0) {
+    const hitMesh = hits[0].object;
+    const idx = meshes.findIndex(p => p.mesh === hitMesh);
+    if (idx === selectedIndex) {
+      deselect();
+    } else {
+      selectPart(idx);
+    }
+  } else {
+    deselect();
+  }
+}
+
+// ─── SELECTION ───────────────────────────────────────────────────────────────
+function selectPart(idx) {
+  if (selectedIndex !== -1 && selectedIndex !== idx) {
+    setPartHighlight(selectedIndex, false);
+    updatePartListItem(selectedIndex);
+  }
+  selectedIndex = idx;
+  setPartHighlight(idx, true);
+  updatePartListItem(idx);
+  const p = meshes[idx];
+  showHUD(`SELECTED: ${p.name}`);
+  document.getElementById('btn-remove').disabled = false;
+  document.getElementById('parts-list').querySelectorAll('.part-item')[idx].scrollIntoView({block:'nearest'});
+}
+
+function deselect() {
+  if (selectedIndex !== -1) {
+    setPartHighlight(selectedIndex, false);
+    updatePartListItem(selectedIndex);
+  }
+  selectedIndex = -1;
+  hideHUD();
+  document.getElementById('btn-remove').disabled = true;
+}
+
+function setPartHighlight(idx, on) {
+  const p = meshes[idx];
+  if (!p || p.removed) return;
+  if (on) {
+    p.mesh.material.emissive = new THREE.Color(0x7ab8c8);
+    p.mesh.material.emissiveIntensity = 0.4;
+  } else {
+    p.mesh.material.emissive = new THREE.Color(0x000000);
+    p.mesh.material.emissiveIntensity = 0;
+  }
+}
+
+// ─── REMOVE / UNDO ───────────────────────────────────────────────────────────
+document.getElementById('btn-remove').addEventListener('click', () => {
+  if (selectedIndex === -1) return;
+  const idx = selectedIndex;
+  meshes[idx].removed = true;
+  meshes[idx].mesh.visible = false;
+  undoStack.push(idx);
+  deselect();
+  updatePartsList();
+  updateStats();
+  document.getElementById('btn-undo').disabled = false;
+  document.getElementById('btn-restore-all').disabled = false;
+});
+
+document.getElementById('btn-undo').addEventListener('click', () => {
+  if (undoStack.length === 0) return;
+  const idx = undoStack.pop();
+  meshes[idx].removed = false;
+  meshes[idx].mesh.visible = true;
+  updatePartsList();
+  updateStats();
+  if (undoStack.length === 0) document.getElementById('btn-undo').disabled = true;
+});
+
+document.getElementById('btn-restore-all').addEventListener('click', () => {
+  meshes.forEach(p => { p.removed = false; p.mesh.visible = true; });
+  undoStack = [];
+  deselect();
+  updatePartsList();
+  updateStats();
+  document.getElementById('btn-undo').disabled = true;
+  document.getElementById('btn-restore-all').disabled = true;
+});
+
+// ─── PARTS LIST UI ───────────────────────────────────────────────────────────
+function updatePartsList() {
+  const list = document.getElementById('parts-list');
+  list.innerHTML = '';
+  meshes.forEach((p, i) => {
+    const item = document.createElement('div');
+    item.className = 'part-item' +
+      (i === selectedIndex ? ' selected' : '') +
+      (p.removed ? ' removed' : '');
+    item.innerHTML = `
+      <div class="part-dot" style="background:#${p.color.toString(16).padStart(6,'0')}"></div>
+      <span class="part-name">${p.name}</span>
+      <span class="part-tris">${p.triCount}T</span>
+    `;
+    if (!p.removed) {
+      item.addEventListener('click', () => {
+        if (i === selectedIndex) deselect();
+        else selectPart(i);
+      });
+    }
+    list.appendChild(item);
+  });
+}
+
+function updatePartListItem(idx) {
+  const items = document.getElementById('parts-list').querySelectorAll('.part-item');
+  if (!items[idx]) return;
+  const p = meshes[idx];
+  items[idx].className = 'part-item' +
+    (idx === selectedIndex ? ' selected' : '') +
+    (p.removed ? ' removed' : '');
+}
+
+function updateStats() {
+  const total = meshes.length;
+  const removed = meshes.filter(p => p.removed).length;
+  const remaining = total - removed;
+  document.getElementById('stat-total').textContent = total;
+  document.getElementById('stat-remaining').textContent = remaining;
+  document.getElementById('stat-removed').textContent = removed;
+  document.getElementById('part-count').textContent = `(${total})`;
+}
+
+// ─── HUD ─────────────────────────────────────────────────────────────────────
+function showHUD(msg) {
+  const h = document.getElementById('selection-hud');
+  h.textContent = msg; h.classList.add('show');
+}
+function hideHUD() {
+  document.getElementById('selection-hud').classList.remove('show');
+}
+
+// ─── CONTROLS ────────────────────────────────────────────────────────────────
+let wireOn = false;
+document.getElementById('btn-wireframe').addEventListener('click', function() {
+  wireOn = !wireOn;
+  this.textContent = wireOn ? '[x] Wire' : '[ ] Wire';
+  this.classList.toggle('active', wireOn);
+  meshes.forEach(p => { p.mesh.material.wireframe = wireOn; });
+});
+
+document.getElementById('btn-reset').addEventListener('click', resetCamera);
+document.getElementById('btn-top').addEventListener('click', () => {
+  sph.phi = 0.01; sph.theta = 0; updateCamera();
+});
+document.getElementById('btn-front').addEventListener('click', () => {
+  sph.phi = Math.PI/2; sph.theta = 0; updateCamera();
+});
+document.getElementById('btn-side').addEventListener('click', () => {
+  sph.phi = Math.PI/2; sph.theta = Math.PI/2; updateCamera();
+});
+
+function resetCamera() {
+  if (meshes.length === 0) return;
+  const box = new THREE.Box3();
+  meshes.forEach(p => box.expandByObject(p.mesh));
+  const size = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z);
+  sph.radius = maxDim * 2.5;
+  sph.theta = 0.5; sph.phi = 1.0;
+  panOffset.set(0, 0, 0);
+  updateCamera();
+}
+
+// ─── STL PARSING ─────────────────────────────────────────────────────────────
+function isASCIISTL(buffer) {
+  const bytes = new Uint8Array(buffer, 0, Math.min(512, buffer.byteLength));
+  for (let i = 0; i < bytes.length; i++) if (bytes[i] > 127) return false;
+  return new TextDecoder().decode(bytes).trimStart().startsWith('solid');
+}
+
+function parseBinarySTL(buffer) {
+  const dv = new DataView(buffer);
+  const n = dv.getUint32(80, true);
+  const pos = new Float32Array(n * 9);
+  let off = 84;
+  for (let i = 0; i < n; i++) {
+    off += 12;
+    for (let v = 0; v < 3; v++) {
+      pos[i*9+v*3+0] = dv.getFloat32(off, true); off+=4;
+      pos[i*9+v*3+1] = dv.getFloat32(off, true); off+=4;
+      pos[i*9+v*3+2] = dv.getFloat32(off, true); off+=4;
+    }
+    off += 2;
+  }
+  return pos;
+}
+
+function parseASCIISTL(buffer) {
+  const text = new TextDecoder().decode(buffer);
+  const positions = [];
+  const re = /vertex\s+([\d.eE+\-]+)\s+([\d.eE+\-]+)\s+([\d.eE+\-]+)/g;
+  let m;
+  while ((m = re.exec(text)) !== null)
+    positions.push(parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3]));
+  return new Float32Array(positions);
+}
+
+// ─── SHELL DETECTION ─────────────────────────────────────────────────────────
+// Union-Find for connecting triangles that share vertices
+function detectShells(positions) {
+  const numTris = positions.length / 9;
+
+  // Round vertex coords to a key for adjacency
+  const PRECISION = 1e4;
+  const vertKey = (x, y, z) =>
+    `${Math.round(x*PRECISION)},${Math.round(y*PRECISION)},${Math.round(z*PRECISION)}`;
+
+  // Map from vertex key -> list of triangle indices
+  const vertToTris = new Map();
+  for (let t = 0; t < numTris; t++) {
+    for (let v = 0; v < 3; v++) {
+      const k = vertKey(positions[t*9+v*3], positions[t*9+v*3+1], positions[t*9+v*3+2]);
+      if (!vertToTris.has(k)) vertToTris.set(k, []);
+      vertToTris.get(k).push(t);
+    }
+  }
+
+  // Union-Find
+  const parent = new Int32Array(numTris);
+  for (let i = 0; i < numTris; i++) parent[i] = i;
+
+  function find(x) {
+    while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; }
+    return x;
+  }
+  function union(a, b) {
+    a = find(a); b = find(b);
+    if (a !== b) parent[a] = b;
+  }
+
+  for (const tris of vertToTris.values()) {
+    for (let i = 1; i < tris.length; i++) union(tris[0], tris[i]);
+  }
+
+  // Group triangles by root
+  const shells = new Map();
+  for (let t = 0; t < numTris; t++) {
+    const root = find(t);
+    if (!shells.has(root)) shells.set(root, []);
+    shells.get(root).push(t);
+  }
+
+  return Array.from(shells.values()).sort((a,b) => b.length - a.length);
+}
+
+// ─── BUILD SCENE FROM SHELLS ─────────────────────────────────────────────────
+function buildScene(positions, filename) {
+  // Clear existing meshes
+  meshes.forEach(p => { scene.remove(p.mesh); p.mesh.geometry.dispose(); p.mesh.material.dispose(); });
+  meshes = [];
+  selectedIndex = -1;
+  undoStack = [];
+  deselect();
+
+  setLoading(true, 'DETECTING SHELLS', '');
+
+  setTimeout(() => {
+    const shells = detectShells(positions);
+
+    // Compute whole-model bounding box center once — shift all verts by this
+    // so the model is centered in the scene without moving parts relative to each other
+    let minX=Infinity, minY=Infinity, minZ=Infinity;
+    let maxX=-Infinity, maxY=-Infinity, maxZ=-Infinity;
+    for (let i = 0; i < positions.length; i+=3) {
+      minX=Math.min(minX,positions[i]);   maxX=Math.max(maxX,positions[i]);
+      minY=Math.min(minY,positions[i+1]); maxY=Math.max(maxY,positions[i+1]);
+      minZ=Math.min(minZ,positions[i+2]); maxZ=Math.max(maxZ,positions[i+2]);
+    }
+    const cx=(minX+maxX)/2, cy=(minY+maxY)/2, cz=(minZ+maxZ)/2;
+
+    shells.forEach((triIndices, i) => {
+      const shellPos = new Float32Array(triIndices.length * 9);
+      triIndices.forEach((t, j) => {
+        for (let k = 0; k < 9; k++) shellPos[j*9+k] = positions[t*9+k];
+      });
+      // Apply whole-model center offset to every vertex
+      for (let v = 0; v < shellPos.length; v+=3) {
+        shellPos[v]   -= cx;
+        shellPos[v+1] -= cy;
+        shellPos[v+2] -= cz;
+      }
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(shellPos, 3));
+
+      // Flat normals — one per triangle, avoids winding-order artifacts
+      const norms = new Float32Array(shellPos.length);
+      for (let t = 0; t < shellPos.length / 9; t++) {
+        const o = t * 9;
+        const ax = shellPos[o+3]-shellPos[o],   ay = shellPos[o+4]-shellPos[o+1], az = shellPos[o+5]-shellPos[o+2];
+        const bx = shellPos[o+6]-shellPos[o],   by = shellPos[o+7]-shellPos[o+1], bz = shellPos[o+8]-shellPos[o+2];
+        const nx = ay*bz - az*by, ny = az*bx - ax*bz, nz = ax*by - ay*bx;
+        const len = Math.sqrt(nx*nx + ny*ny + nz*nz) || 1;
+        norms[o]   = nx/len; norms[o+1] = ny/len; norms[o+2] = nz/len;
+        norms[o+3] = nx/len; norms[o+4] = ny/len; norms[o+5] = nz/len;
+        norms[o+6] = nx/len; norms[o+7] = ny/len; norms[o+8] = nz/len;
+      }
+      geo.setAttribute('normal', new THREE.BufferAttribute(norms, 3));
+      // NO geo.center() — parts stay in their original positions relative to each other
+
+      const color = PART_COLORS[i % PART_COLORS.length];
+      const mat = new THREE.MeshStandardMaterial({
+        color,
+        roughness: 0.55,
+        metalness: 0.3,
+        side: THREE.DoubleSide,
+        wireframe: wireOn
+      });
+
+      const mesh = new THREE.Mesh(geo, mat);
+      scene.add(mesh);
+
+      meshes.push({
+        mesh,
+        color,
+        name: `Part ${i+1}`,
+        triCount: triIndices.length,
+        removed: false
+      });
+    });
+
+    // Fit camera
+    const box = new THREE.Box3();
+    meshes.forEach(p => box.expandByObject(p.mesh));
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    sph.radius = maxDim * 2.5;
+    sph.theta = 0.5; sph.phi = 1.0;
+    panOffset.set(0, 0, 0);
+    updateCamera();
+
+    document.getElementById('empty-overlay').style.display = 'none';
+    document.getElementById('btn-undo').disabled = true;
+    document.getElementById('btn-restore-all').disabled = true;
+    document.getElementById('btn-remove').disabled = true;
+
+    updatePartsList();
+    updateStats();
+    setLoading(false);
+  }, 80);
+}
+
+// ─── LOAD PIPELINE ───────────────────────────────────────────────────────────
+function loadArrayBuffer(buffer, name) {
+  setLoading(true, 'LOADING STL', name);
+  setTimeout(() => {
+    try {
+      const positions = isASCIISTL(buffer)
+        ? parseASCIISTL(buffer)
+        : parseBinarySTL(buffer);
+      buildScene(positions, name);
+    } catch(e) {
+      setLoading(false);
+      showError('Parse error: ' + (e.message || e));
+    }
+  }, 50);
+}
+
+function setLoading(v, msg, sub) {
+  const el = document.getElementById('loading-overlay');
+  el.style.display = v ? 'flex' : 'none';
+  if (msg) document.getElementById('loading-msg').textContent = msg;
+  if (sub !== undefined) document.getElementById('loading-sub').textContent = sub;
+}
+
+function showError(msg) {
+  const t = document.getElementById('error-toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 4000);
+}
+
+// ─── FILE INPUT / DROP ───────────────────────────────────────────────────────
+document.getElementById('file-input').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = ev => loadArrayBuffer(ev.target.result, f.name);
+  r.readAsArrayBuffer(f);
+});
+
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (!f || !f.name.toLowerCase().endsWith('.stl')) { showError('Please drop an STL file'); return; }
+  const r = new FileReader();
+  r.onload = ev => loadArrayBuffer(ev.target.result, f.name);
+  r.readAsArrayBuffer(f);
+});
+
+// ─── RENDER LOOP ─────────────────────────────────────────────────────────────
+(function animate() { requestAnimationFrame(animate); renderer.render(scene, camera); })();
+
+// ─── INIT ────────────────────────────────────────────────────────────────────
+updateBuildInfo();
+
+</script>
+
+<!--
+  ═══════════════════════════════════════════════════
+  SCP BUILD VIEWER — SETUP
+  ═══════════════════════════════════════════════════
+  1. Place this file anywhere (Documents recommended)
+  2. STL files → C:\Users\3dsandprinter\OneDrive - Southern Cast Products\
+                   Documents\past builds\STL Files\
+  3. File naming: M-D-YY.stl  (e.g. 6-5-26.stl)
+  4. Open in Chrome or Edge — no install needed
+
+  UNPACK LOGIC:
+  Mon   → shows Friday's build
+  Tue–Fri → shows yesterday's build
+  Weekend → no build today
+
+  INTERACTIVE PARTS:
+  - STL shells auto-detected on load
+  - Click a part to select (highlights cyan)
+  - Click again to deselect
+  - "Remove Selected" hides the part
+  - "Undo Remove" brings back last removed
+  - "Restore All" resets everything
+  ═══════════════════════════════════════════════════
+-->
+</body>
+</html>
